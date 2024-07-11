@@ -16,16 +16,28 @@ from raygun.torch.optimizers import BaseDummyOptimizer, get_base_optimizer
 from raygun.torch.systems import BaseSystem
 
 
+logger: logging.Logger = logging.Logger(__name__, "INFO")
+
 class CycleGAN(BaseSystem):
-    def __init__(self, config=None):
+    """Implementation of a CycleGAN system for image-to-image translation using PyTorch.
+
+    This class extends the `BaseSystem` class and implements the training and inference
+    pipelines for a CycleGAN model.
+
+    Args:
+        config (``string``, optional):
+            An optional path to CycleGAN configuration parameters for your system.
+            These work to update/modified the default system parameters in the ``default_cycleGAN_conf.json``.
+    """
+
+    def __init__(self, config=None) -> None:
         super().__init__(
             default_config="../default_configs/default_cycleGAN_conf.json",
             config=config,
         )
-        self.logger = logging.Logger(__name__, "INFO")
 
         if self.common_voxel_size is None:
-            self.common_voxel_size = gp.Coordinate(
+            self.common_voxel_size: gp.Coordinate = gp.Coordinate(
                 daisy.open_ds(
                     self.sources["B"]["path"], self.sources["B"]["name"]
                 ).voxel_size
@@ -33,11 +45,24 @@ class CycleGAN(BaseSystem):
         else:
             self.common_voxel_size = gp.Coordinate(self.common_voxel_size)
         if self.ndims is None:
-            self.ndims = sum(
+            self.ndims: int = sum(
                 np.array(self.common_voxel_size) == np.min(self.common_voxel_size)
             )
 
-    def batch_show(self, batch=None, i=0, show_mask=False):
+    def batch_show(self, batch=None, i=0, show_mask=False) -> None:
+        """Convenience method to display an output batch of a training process.
+
+        Args:
+            batch (gp.BatchRequest, optional): 
+                Batch of training data to process. Defaults to None.
+
+            i (``int``): 
+                Index of the element in the batch to display. Defaults to 0.
+
+            show_mask (``bool``): 
+                Toggle to add a mask on the displayed batch. Defaults to False.
+        """
+
         if batch is None:
             batch = self.batch
         if not hasattr(self, "col_dict"):
@@ -81,7 +106,14 @@ class CycleGAN(BaseSystem):
                 )
                 ax.set_title(label)
 
-    def write_tBoard_graph(self, batch=None):
+    def write_tBoard_graph(self, batch=None) -> None:
+        """Writes the model graph to TensorBoard summary writer.
+    
+        Args:
+            batch (gp.BatchRequest, optional): 
+                Batch of training data. Defaults to None.
+        """
+
         if batch is None:
             batch = self.trainer.batch
 
@@ -105,7 +137,19 @@ class CycleGAN(BaseSystem):
         except:
             self.logger.warning("Failed to add model graph to tensorboard.")
 
-    def get_extents(self, side_length=None, array_name=None):
+    def get_extents(self, side_length=None, array_name=None) -> gp.Coordinate:
+        """Returns the extent of the data in the spatial dimensions.
+    
+        Args:
+            side_length (``int``, optional): 
+                Side length of the array. Defaults to None.
+            array_name (``string``, optional): 
+                Name of the array. Defaults to None.
+            
+        Returns:
+            gp.Coordinate: 
+                A tuple containing the extent of the data in the spatial dimensions.
+        """
         if side_length is None:
             side_length = self.side_length
 
@@ -130,24 +174,24 @@ class CycleGAN(BaseSystem):
         ] = side_length  # assumes first dimension is z (i.e. the dimension breaking isotropy)
         return gp.Coordinate(extents)
 
-    def setup_networks(self):
+    def setup_networks(self) -> None:
         self.netG1 = self.get_network(self.gnet_type, self.gnet_kwargs)
         self.netG2 = self.get_network(self.gnet_type, self.gnet_kwargs)
 
         self.netD1 = self.get_network(self.dnet_type, self.dnet_kwargs)
         self.netD2 = self.get_network(self.dnet_type, self.dnet_kwargs)
 
-    def setup_model(self):
+    def setup_model(self) -> None:
         if not hasattr(self, "netG1"):
             self.setup_networks()
 
         if self.sampling_bottleneck:
-            scale_factor_A = tuple(
+            scale_factor_A: tuple = tuple(
                 np.divide(self.common_voxel_size, self.A_voxel_size)[-self.ndims :]
             )
             if not any([s < 1 for s in scale_factor_A]):
                 scale_factor_A = None
-            scale_factor_B = tuple(
+            scale_factor_B: tuple = tuple(
                 np.divide(self.common_voxel_size, self.B_voxel_size)[-self.ndims :]
             )
             if not any([s < 1 for s in scale_factor_B]):
@@ -155,7 +199,7 @@ class CycleGAN(BaseSystem):
         else:
             scale_factor_A, scale_factor_B = None, None
 
-        self.model = CycleModel(
+        self.model:CycleModel = CycleModel(
             self.netG1,
             self.netG2,
             scale_factor_A,
@@ -164,7 +208,7 @@ class CycleGAN(BaseSystem):
             freeze_norms_at=self.freeze_norms_at,
         )
 
-    def setup_optimization(self):
+    def setup_optimization(self) -> None:
         self.optimizer_D = get_base_optimizer(self.d_optim_type)(
             itertools.chain(self.netD1.parameters(), self.netD2.parameters()),
             **self.d_optim_kwargs
@@ -175,21 +219,21 @@ class CycleGAN(BaseSystem):
             scheduler_kwargs = self.scheduler_kwargs
         else:
             scheduler = None
-            scheduler_kwargs = {}
+            scheduler_kwargs:dict = {}
 
         if self.loss_type.lower() == "link":
             self.optimizer_G = get_base_optimizer(self.g_optim_type)(
                 itertools.chain(self.netG1.parameters(), self.netG2.parameters()),
                 **self.g_optim_kwargs
             )
-            self.optimizer = BaseDummyOptimizer(
+            self.optimizer: BaseDummyOptimizer = BaseDummyOptimizer(
                 optimizer_G=self.optimizer_G,
                 optimizer_D=self.optimizer_D,
                 scheduler=scheduler,
                 scheduler_kwargs=scheduler_kwargs,
             )
 
-            self.loss = LinkCycleLoss(
+            self.loss:LinkCycleLoss = LinkCycleLoss(
                 self.netD1,
                 self.netG1,
                 self.netD2,
@@ -232,9 +276,9 @@ class CycleGAN(BaseSystem):
                 "Unexpected Loss Style. Accepted options are 'cycle' or 'split'"
             )
 
-    def setup_datapipes(self):
-        self.arrays = {}
-        self.datapipes = {}
+    def setup_datapipes(self) -> None:
+        self.arrays:dict = {}
+        self.datapipes:dict = {}
         for id, src in self.sources.items():
             self.datapipes[id] = CycleDataPipe(
                 id,
@@ -246,16 +290,25 @@ class CycleGAN(BaseSystem):
             )
             self.arrays.update(self.datapipes[id].arrays)
 
-    def make_request(self, mode: str = "train"):
+    def make_request(self, mode: str = "train") -> gp.BatchRequest:
+        """Creates a BatchRequest object for the specified mode.
+
+        Args:
+            mode (``string``): 
+                The processing mode to create the BatchRequest for. Can be one of "train", "val", "test", or "predict".
+            
+        Returns:
+            A BatchRequest object specifying the desired output arrays and their requested extents and voxel sizes.
+        """
         # create request
-        request = gp.BatchRequest()
+        request:gp.BatchRequest = gp.BatchRequest()
         for array_name, array in self.arrays.items():
             if (
                 mode == "prenet" and ("real" in array_name or "mask" in array_name)
             ) or (
                 mode != "prenet" and (mode != "predict" or "cycle" not in array_name)
             ):
-                extents = self.get_extents(array_name=array.identifier)
+                extents: gp.Coordinate = self.get_extents(array_name=array.identifier)
                 request.add(
                     array, self.common_voxel_size * extents, self.common_voxel_size
                 )
@@ -263,7 +316,7 @@ class CycleGAN(BaseSystem):
 
 
 if __name__ == "__main__":
-    system = CycleGAN(config="./train_conf.json")
+    system: CycleGAN = CycleGAN(config="./train_conf.json")
     system.logger.info("CycleGAN system loaded. Training...")
-    _ = system.train()
+    _: None = system.train()
     system.logger.info("Done training!")

@@ -379,7 +379,7 @@ class ResidualUNet(torch.nn.Module):
         residual=False,
         norm_layer=None,
         add_noise=False,
-    ):
+    ) -> None:
         """Create a U-Net::
 
             f_in --> f_left --------------------------->> f_right--> f_out

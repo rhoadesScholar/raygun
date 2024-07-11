@@ -20,7 +20,7 @@ parent_dir = os.path.dirname(os.path.dirname(__file__))
 class BaseSystem:
     def __init__(
         self, default_config="../default_configs/blank_conf.json", config=None
-    ):
+    ) -> None:
         # Add default params
         default_config = default_config.replace("..", parent_dir)
         for key, value in read_config(default_config).items():
@@ -309,7 +309,7 @@ class BaseSystem:
         
         self.arrays.update(self.trainer.arrays)
 
-    def build_system(self):
+    def build_system(self) -> None:
         # define our network model for training
         self.setup_networks()
         self.setup_model()
@@ -317,7 +317,7 @@ class BaseSystem:
         self.setup_datapipes()
         self.setup_trainer()
 
-    def train(self):
+    def train(self) -> None:
         if not hasattr(self, "trainer"):
             self.build_system()
         if hasattr(self, "train_kwargs"):

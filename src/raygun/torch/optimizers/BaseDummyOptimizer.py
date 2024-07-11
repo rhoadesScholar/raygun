@@ -3,10 +3,23 @@ import torch
 
 
 class BaseDummyOptimizer(torch.nn.Module):
-    def __init__(self, scheduler=None, scheduler_kwargs={}, **optimizers):
+    """Base Dummy Optimizer for training.
+
+    Args:
+        scheduler (``string``, optional): 
+            The name of the learning rate scheduler to use. Default is None.
+
+        scheduler_kwargs (``dict``, optional): 
+            A dictionary of keyword arguments to pass to the learning rate scheduler. Default is an empty dictionary.
+
+        **optimizers (optional): 
+            Keyword arguments for the optimizer(s) to use.
+    """
+
+    def __init__(self, scheduler=None, scheduler_kwargs={}, **optimizers) -> None:
         super().__init__()
 
-        self.schedulers = {}
+        self.schedulers: dict = {}
 
         for name, optimizer in optimizers.items():
             setattr(self, name, optimizer)
@@ -21,8 +34,8 @@ class BaseDummyOptimizer(torch.nn.Module):
             if isinstance(scheduler, str):
                 if scheduler == "LambdaLR":
 
-                    def lambda_rule(epoch):
-                        lr_l = 1.0 - max(
+                    def lambda_rule(epoch:int) -> float:
+                        lr_l: float = 1.0 - max(
                             0,
                             epoch
                             + scheduler_kwargs["epoch_count"]
@@ -42,6 +55,7 @@ class BaseDummyOptimizer(torch.nn.Module):
             elif scheduler is not None:
                 self.schedulers[name] = scheduler(optimizer, **scheduler_kwargs)
 
-    def step(self):
+    def step(self) -> None:
+        """Takes a step of the optimizer(s) and the corresponding scheduler(s). """
         for name, scheduler in self.schedulers.items():
             scheduler.step()

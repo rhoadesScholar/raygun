@@ -1,53 +1,98 @@
 from raygun.evaluation.validate_affinities import run_validation
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 from raygun.utils import passing_locals
 from raygun.torch.losses import GANLoss
 
 
 class BaseCompetentLoss(torch.nn.Module):
-    def __init__(self, **kwargs):
-        super().__init__()
-        kwargs = passing_locals(locals())
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+    """Base loss function, implemented in PyTorch.
 
-        if hasattr(self, "gan_mode"):
-            self.gan_loss = GANLoss(gan_mode=self.gan_mode)
+        Args:
+            **kwargs:
+                Optional keyword arguments.
+    """
 
-        self.loss_dict = {}
+    def __init__(self, **kwargs) -> None:
+            super().__init__()
+            kwargs: dict = passing_locals(locals())
+            for key, value in kwargs.items():
+                setattr(self, key, value)
 
-    def set_requires_grad(self, nets, requires_grad=False):
-        """Set requies_grad=False for all the networks to avoid unnecessary computations
-        Parameters:
-            nets (network list)   -- a list of networks
-            requires_grad (bool)  -- whether the networks require gradients or not
+            if hasattr(self, "gan_mode"):
+                self.gan_loss: GANLoss = GANLoss(gan_mode=self.gan_mode)
+
+            self.loss_dict: dict = {}
+    
+    def set_requires_grad(self, nets:list, requires_grad=False) -> None:
+        """Sets requies_grad=False for all the networks to avoid unnecessary computations.
+        
+        Args:
+            nets (``list[torch.nn.Module, ...]``):
+                A list of networks.
+
+            requires_grad (``bool``):
+                Whether the networks require gradients or not.
         """
-        if not isinstance(nets, list):
-            nets = [nets]
         for net in nets:
             if net is not None:
                 for param in net.parameters():
                     param.requires_grad = requires_grad
 
-    def crop(self, x, shape):
-        """Center-crop x to match spatial dimensions given by shape."""
+    def crop(self, x:torch.Tensor, shape:tuple) -> torch.Tensor:
+        """Center-crop x to match spatial dimensions given by shape.
+        
+        Args:
+            x (``torch.Tensor``):
+                The tensor to center-crop.
+            
+            shape (``tuple``):
+                The shape to match the crop to.
+        
+        Returns:
+            ``torch.Tensor``:
+                The center-cropped tensor to the spatial dimensions given.
+        """
 
-        x_target_size = x.size()[: -self.dims] + shape
+        x_target_size:tuple = x.size()[: -self.dims] + shape
 
-        offset = tuple((a - b) // 2 for a, b in zip(x.size(), x_target_size))
+        offset: tuple = tuple((a - b) // 2 for a, b in zip(x.size(), x_target_size))
 
-        slices = tuple(slice(o, o + s) for o, s in zip(offset, x_target_size))
+        slices: tuple = tuple(slice(o, o + s) for o, s in zip(offset, x_target_size))
 
         return x[slices]
 
-    def clamp_weights(self, net, min=-0.01, max=0.01):
+    def clamp_weights(self, net:torch.nn.Module, min=-0.01, max=0.01) -> None:
+        """Clamp the weights of a given network.
+        
+        Args:
+            net (``torch.nn.Module``):
+                The network to clamp.
+            
+            min (``float``, optional):
+                The minimum value to clamp network weights to.
+
+            max (``float``, optional):
+                The maximum value to clamp network weights to.
+        """
+
         for module in net.model:
             if hasattr(module, "weight") and hasattr(module.weight, "data"):
                 temp = module.weight.data
                 module.weight.data = temp.clamp(min, max)
 
-    def add_log(self, writer, step):
+    def add_log(self, writer, step) -> None:
+        """Add an additional log to the writer, containing loss values and image examples.
+
+        Args:
+            writer (``SummaryWriter``):
+                The display writer to append the losses & images to.
+            
+            step (``int``):
+                The current training step.
+        """
+
         # add loss values
         for key, loss in self.loss_dict.items():
             writer.add_scalar(key, loss, step)
@@ -69,7 +114,7 @@ class BaseCompetentLoss(torch.nn.Module):
                 img = (img * 0.5) + 0.5
             writer.add_image(name, img, global_step=step, dataformats="HW")
 
-    def update_status(self, step):
+    def update_status(self, step) -> None:
         if hasattr(self, "validation_config") and (
             step % self.validation_config["validate_every"] == 0
         ):
